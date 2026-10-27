@@ -1,0 +1,452 @@
+---
+title: "Problem Set 1: Estimating the relationship between climate and mortality"
+author: "De la Cruz, Manuel"
+format: html
+editor: visual
+---
+
+```{r}
+library(tidyverse)
+library(fixest)
+library(data.table)
+
+setwd("C:/Manuel/4) Student/Semester 2026-2 (Exchange Program)/Energy/Homework 1")
+
+df <- data.frame(fread("climate_mortality.csv"))[, -1] #eliminate the first column
+
+```
+
+# 1) Descriptive analysis
+
+## 1.1) ave_temp: Monthly average temperature
+
+```{r}
+
+# a) Average by month
+df_average = df %>% 
+  group_by(month) %>%
+  summarize(ave_temp_mean = mean(ave_temp, na.rm = TRUE))
+  #the option ignores missing values
+
+ggplot(data = df_average, aes(x = month, y = ave_temp_mean)) + 
+  geom_point(size=2.5, color="2C7FB8") +
+  geom_line(color = "2C7FB8", linewidth = 0.8) +
+  scale_x_continuous(breaks = 1:12, labels = month.abb) +
+    # match the showed x with the point.
+  labs(
+    x = "Month",
+    y="Average Temperature F°",
+    title="Average Monthly Temperature F°, 1960-2004"
+    ) +
+  theme(
+    plot.title = element_text(face = "bold"),
+    )
+ggsave("1_temperature_month.png", width = 7, height = 5, dpi = 300)
+
+# b) Average by year
+length(unique(df$year))
+
+df_year <- df %>% 
+  group_by(year) %>%
+  summarize(ave_temp_mean = mean(ave_temp, na.rm = TRUE))
+
+ggplot(data = df_year, aes(x = year, y = ave_temp_mean)) + 
+  geom_point(size=2.5, color="2C7FB8") +
+  geom_line(color = "2C7FB8", linewidth = 0.8) +
+  scale_x_continuous(breaks = seq(1960, 2004, by = 5)) +
+  # position of y
+  labs(
+    x = "Year",
+    y="Average Temperature F°",
+    title="Average Yearly Temperature F°, 1960-2004"
+    ) +
+  theme(
+    plot.title = element_text(face = "bold"),
+    )
+ggsave("1_temperature_year.png", width = 7, height = 5, dpi = 300)
+
+#c) Mapping
+df_state = df %>% 
+  group_by(stfips) %>%
+  summarize(ave_temp_mean=mean(ave_temp))
+
+library(usmap)
+df_state$fips = df_state$stfips
+pl_map = plot_usmap(data = df_state,
+                    regions = 'state',
+                    values = 'ave_temp_mean'
+                    )
+print(pl_map)
+
+
+library(RColorBrewer)
+pal = rev(brewer.pal(9, "RdBu"))
+pl_map_pretty =
+  pl_map +
+  scale_fill_gradientn(colors = pal, na.value = "gray80",) +
+  labs(fill = 'Avg. Temperature F°')
+print(pl_map_pretty)
+ggsave("1_temperature_states.png", width = 7, height = 5, dpi = 300)
+
+```
+
+## 1.2) drate_6599: Monthly mortality rate per 100.000 population
+
+```{r}
+
+# a) Average by month
+df_average = df %>% 
+  group_by(month) %>%
+  summarize(drate_6599_mean = mean(drate_6599, na.rm = TRUE))
+
+ggplot(data = df_average, aes(x = month, y = drate_6599_mean)) + 
+  geom_point(size=2.5, color="2C7FB8") +
+  geom_line(color = "2C7FB8", linewidth = 0.8) +
+  scale_x_continuous(breaks = 1:12, labels = month.abb) +
+    # match the showed x with the point.
+  labs(
+    x = "Month",
+    y="Average Mortality Rate",
+    title="Avg. Monthly Mortality Rate (per 100.000, ages 65+), 1960-2004"
+    ) +
+  theme(
+    plot.title = element_text(face = "bold"),
+    )
+
+# b) Average by year
+length(unique(df$year))
+
+df_year = df %>% 
+  group_by(year) %>%
+  summarize(drate_6599_mean = mean(drate_6599, na.rm = TRUE))
+
+ggplot(data = df_year, aes(x = year, y = drate_6599_mean)) + 
+  geom_point(size=2.5, color="2C7FB8") +
+  geom_line(color = "2C7FB8", linewidth = 0.8) +
+  scale_x_continuous(breaks = seq(1960, 2004, by = 5)) +
+  # position of y
+  labs(
+    x = "Year",
+    y="Average Mortality Rate",
+    title="Avg. Yearly Mortality Rate (per 100.000, ages 65+), 1960-2004"
+    ) +
+  theme(
+    plot.title = element_text(face = "bold"),
+    )
+ggsave("1_mortality_years.png", width = 7, height = 5, dpi = 300)
+
+#c) Mapping
+df_state = df %>% 
+  group_by(stfips) %>%
+  summarize(drate_6599_mean=mean(drate_6599))
+
+library(usmap)
+df_state$fips = df_state$stfips
+pl_mapdead = plot_usmap(data = df_state,
+                    regions = "state",
+                    values = "drate_6599_mean"
+                    )
+print(pl_mapdead)
+
+
+library(RColorBrewer)
+pal = rev(brewer.pal(9, "RdBu"))
+pl_mapdead_pretty = 
+  pl_mapdead +
+  scale_fill_gradientn(colors = pal, na.value = "gray80",) +
+  labs(fill = "Avg. Mortality Rate")
+print(pl_mapdead_pretty)
+ggsave("1_mortality_states.png", width = 7, height = 5, dpi = 300)
+
+```
+
+# 2) Cross-sectional correlations
+
+```{r}
+# a)
+library(binsreg)
+binsreg(
+  y = drate_6599, x = ave_temp,
+  data = df,
+  nbins = 15
+)
+
+# b)
+binsreg(
+  y = drate_6599, x = ave_temp,
+  w = ~ stfips + year,
+  data = df,
+  nbins = 15
+)
+ggsave("2_binsreg_controls.png", width = 7, height = 5, dpi = 300)
+
+# c) 
+# PDF
+
+```
+
+# 3) Causal analysis
+
+```{r}
+
+# a) 
+eq1 = feols(ln_drate_6599 ~ days_above90 + days_8089 + days_below40
+            + devp25 + devp75
+            | stfips^month + year^month,
+            data = df,
+            cluster = ~ stfips
+)
+
+etable(eq1)
+
+# b)
+# PDF
+
+# c)
+# PDF
+
+# d)
+eq2 = feols(ln_drate_6599 ~ ave_temp + devp25 + devp75 
+            | stfips^month + year^month,
+            data = df,
+            cluster = ~ stfips
+)
+
+etable(eq2)
+
+# PDF
+
+# e)
+df = df %>% 
+  mutate(south = uscr == 7 | uscr == 8 | uscr == 9)
+
+south_1 = feols(ln_drate_6599 ~ days_above90 + days_8089
+                + days_below40 + devp25 + devp75 
+                | stfips^month + year^month,
+                data = df %>% filter(south, year <= 1980),
+                cluster = ~ stfips
+)
+
+south_2 = feols(ln_drate_6599 ~ days_above90 + days_8089
+                + days_below40 + devp25 + devp75 
+                | stfips^month + year^month,
+                data = df %>% filter(south, year >= 1981),
+                cluster = ~ stfips
+)
+
+north_1 = feols(ln_drate_6599 ~ days_above90 + days_8089
+                + days_below40 + devp25 + devp75 
+                | stfips^month + year^month,
+                data = df %>% filter(!south, year <= 1980),
+                cluster = ~ stfips
+)
+
+north_2 = feols(ln_drate_6599 ~ days_above90 + days_8089
+                + days_below40 + devp25 + devp75 
+                | stfips^month + year^month,
+                data = df %>% filter(!south, year >= 1981),
+                cluster = ~ stfips
+)
+
+etable(
+  list("South 60-80" = south_1, 
+       "South 81-04" = south_2,
+       "Non-S 60-80" = north_1, 
+       "Non-S 81-04" = north_2)
+)
+
+# f)
+# PDF
+
+```
+
+# 4) Placebo test
+
+```{r}
+
+# a)
+placebo = feols(drate_idf ~ days_above90 + days_8089 + days_below40
+                + devp25 + devp75
+                | stfips^month + year^month,
+                data = df,
+                cluster = ~ stfips
+                )
+etable(placebo)
+
+# b)
+# PDF
+
+```
+
+# 5) Benefit-cost analysis
+
+## 5.1) Predicted counterfactual mortality rate
+
+```{r}
+
+# SOUTH :::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+
+# Mortality rate predicted
+s_8104 = feols(ln_drate_6599 ~ days_above90 + days_8089 
+                + days_below40 + devp25 + devp75
+                | stfips^month + year^month,
+                data = df %>% filter(south, year >= 1981),
+                cluster = ~ stfips
+                )
+p_drate_s8104 = mean(exp(predict(s_8104))) # It is in log
+
+# Formatting data
+df_s8104 = df %>% 
+  filter(south, year >= 1981, year <= 2004) %>%
+  mutate(`stfips^month` = paste(stfips, month, sep = "_"),
+         `year^month`   = paste(year, month, sep = "_"))
+
+# Counterfactual prediction: Coefficients
+scaled_s8104 = coef(s_8104)
+scaled_s8104["days_above90"] = scaled_s8104["days_above90"] * 0.5
+
+# Counterfactual prediction: Fixed effects
+fe_s8104 = fixef(s_8104)
+fe_vector_s = rep(0, nrow(df_s8104))
+for (fe_name in names(fe_s8104)) {
+  fe_vector_s = fe_vector_s + fe_s8104[[fe_name]][as.character(df_s8104[[fe_name]])]
+}
+
+# Counterfactual prediction: Results
+comp_vars = c("days_above90", "days_8089", "days_below40", "devp25", "devp75")
+X_obser = as.matrix(df_s8104[, comp_vars])
+p_ln_drate_cf_s = X_obser %*% scaled_s8104[comp_vars] + fe_vector_s
+p_drate_cf_s8104 = mean(exp(p_ln_drate_cf_s))
+
+p_drate_s8104
+p_drate_cf_s8104
+
+# NON-SOUTH :::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+
+# Mortality rate predicted
+ns_8104 = feols(ln_drate_6599 ~ days_above90 + days_8089 
+                + days_below40 + devp25 + devp75
+                | stfips^month + year^month,
+                data = df %>% filter(!south, year >= 1981),
+                cluster = ~ stfips
+                )
+p_drate_ns8104 = mean(exp(predict(ns_8104))) # It is in log
+
+# Formatting data
+df_ns8104 = df %>% 
+  filter(!south, year >= 1981, year <= 2004) %>%
+  mutate(`stfips^month` = paste(stfips, month, sep = "_"),
+         `year^month`   = paste(year, month, sep = "_"))
+
+# Counterfactual prediction: Coefficients
+scaled_ns8104 = coef(ns_8104)
+scaled_ns8104["days_above90"] = scaled_ns8104["days_above90"] * 0.5
+
+# Counterfactual prediction: Fixed effects
+fe_ns8104 = fixef(ns_8104)
+fe_vector_ns = rep(0, nrow(df_ns8104))
+for (fe_name in names(fe_s8104)) {
+  fe_vector_ns = fe_vector_ns + fe_ns8104[[fe_name]][as.character(df_ns8104[[fe_name]])]
+}
+
+# Counterfactual prediction: Results
+comp_vars = c("days_above90", "days_8089", "days_below40", "devp25", "devp75")
+X_obser = as.matrix(df_ns8104[, comp_vars])
+p_ln_drate_cf_ns = X_obser %*% scaled_ns8104[comp_vars] + fe_vector_ns
+p_drate_cf_ns8104 = mean(exp(p_ln_drate_cf_ns))
+
+p_drate_ns8104
+p_drate_cf_ns8104
+
+```
+
+## 5.2) Life expectancy
+
+```{r}
+#install.packages("pracma")
+library(pracma)
+
+beta <- 0.085        # Gompertz aging rate per year
+max_age <- 120       # maximum age for integration
+
+# function to compute the implied pooled 65+ rate for given alpha
+pooled_rate_fn <- function(alpha) {
+  # numerator: expected deaths
+  deaths <- integrate(function(x) alpha * 
+                        exp(beta * (x-65)) * 
+                        surv_gompertz(x, alpha, beta),
+                      lower = 65, 
+                      upper = max_age)$value
+  # denominator: person-years
+  py <- integrate(function(x) surv_gompertz(x, alpha, beta), 
+                  lower = 65, 
+                  upper = max_age)$value
+  deaths / py
+}
+
+# Gompertz survival function given alpha 
+surv_gompertz <- function(x, alpha, beta) {
+  exp(-(alpha / beta) * (exp(beta * (x - 65)) - 1))
+}
+
+
+get_life_exp_65 <- function (pooled_rate, # mortality rate
+                             beta, 
+                             max_age) {
+  
+  # convert pooled monthly rate to annual per-person rate 
+  pooled_annual <- (12 * pooled_rate) / 100000 
+  
+  alpha_est <- uniroot(function(a) pooled_rate_fn(a) - pooled_annual,
+                       lower = 0, upper = 1)$root
+  
+  e65 <- integral(function(x) surv_gompertz(x, alpha_est, beta), 65, max_age)
+  
+  return(e65)
+  
+}
+
+le65_real_s = get_life_exp_65(p_drate_s8104, beta, max_age)
+le65_cf_s = get_life_exp_65(p_drate_cf_s8104, beta, max_age)
+le65_real_ns = get_life_exp_65(p_drate_ns8104, beta, max_age)
+le65_cf_ns = get_life_exp_65(p_drate_cf_ns8104, beta, max_age)
+
+```
+
+## 5.3) Benefit-cost
+
+```{r}
+
+vlifeyear = 314000
+pop_south = 22343459
+pop_nsouth = 34939224
+
+benefit_south = (le65_cf_s  - le65_real_s)  * vlifeyear * pop_south / 1e9
+benefit_nsouth = (le65_cf_ns - le65_real_ns) * vlifeyear * pop_nsouth / 1e9
+
+cost_south = 30
+cost_nsouth = 70
+
+ratio_south = benefit_south / cost_south
+ratio_nsouth = benefit_nsouth / cost_nsouth
+
+results = tibble(
+  region = c("South", "Non-South"),
+  ave_drate = c(p_drate_s8104, p_drate_ns8104),
+  ave_drate_cf = c(p_drate_cf_s8104, p_drate_cf_ns8104),
+  le65_real = c(le65_real_s, le65_real_ns),
+  le65_cf = c(le65_cf_s, le65_cf_ns),
+  benefit_billion = c(benefit_south, benefit_nsouth),
+  cost_billion = c(cost_south, cost_nsouth),
+  ratio = c(ratio_south, ratio_nsouth)
+)
+print(results)
+
+#install.packages("gt")
+#install.packages("webshot2")
+library(gt)
+results %>%
+  gt() %>%
+  gtsave("5_results.png")
+
+```
